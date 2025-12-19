@@ -35,12 +35,13 @@ import UserProfile from "./components/UserProfile";
 import "./styles/App.css";
 
 // Konfigurasi API - LANGSUNG KE BACKEND
-const API_BASE_URL = "http://192.168.215.87:8000"; // URL backend langsung
+const API_BASE_URL = "http://192.168.215.87:8000";
 const TOP_N_RECOMMENDATIONS = 10;
 
 function App() {
-  const [allBooks, setAllBooks] = useState([]);
-  const [userRecommendations, setUserRecommendations] = useState([]);
+  const [allBooks, setAllBooks] = useState([]); // Semua buku yang tersedia
+  const [userRecommendations, setUserRecommendations] = useState([]); // Rekomendasi untuk user
+  const [userSpecificBooks, setUserSpecificBooks] = useState([]); // Buku khusus untuk user saat ini
   const [filteredBooks, setFilteredBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
@@ -71,11 +72,165 @@ function App() {
     { "User-ID": 35, Age: 29, Location: "Singapore" },
   ]);
 
-  // Fungsi untuk mengambil rekomendasi berdasarkan user_id
+  // Data buku demo untuk semua user
+  const DEMO_BOOKS = useMemo(
+    () => [
+      // Buku untuk User ID 2
+      {
+        ISBN: "0345417623",
+        "Book-Title": "Timeline",
+        "Year-Of-Publication": "2000",
+        "Book-Author": "MICHAEL CRICHTON",
+        Publisher: "Ballantine Books",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0345417623.01.LZZZZZZZ.jpg",
+        predicted_rating: 10.66,
+        user_id: 2,
+      },
+      {
+        ISBN: "0842329129",
+        "Book-Title": "Left Behind: A Novel of the Earth's Last Days",
+        "Year-Of-Publication": "1996",
+        "Book-Author": "Tim Lahaye",
+        Publisher: "Tyndale House Publishers",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0842329129.01.LZZZZZZZ.jpg",
+        predicted_rating: 10.17,
+        user_id: 2,
+      },
+      // Buku untuk User ID 5 (dari API response Anda)
+      {
+        ISBN: "0312278586",
+        "Book-Title": "The Nanny Diaries: A Novel",
+        "Year-Of-Publication": "2002",
+        "Book-Author": "Emma McLaughlin",
+        Publisher: "St. Martin's Press",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0312278586.01.LZZZZZZZ.jpg",
+        predicted_rating: 4.97,
+        user_id: 5,
+      },
+      {
+        ISBN: "0142001740",
+        "Book-Title": "The Secret Life of Bees",
+        "Year-Of-Publication": "2003",
+        "Book-Author": "Sue Monk Kidd",
+        Publisher: "Penguin Books",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0142001740.01.LZZZZZZZ.jpg",
+        predicted_rating: 4.23,
+        user_id: 5,
+      },
+      {
+        ISBN: "0671021001",
+        "Book-Title": "She's Come Undone (Oprah's Book Club)",
+        "Year-Of-Publication": "1998",
+        "Book-Author": "Wally Lamb",
+        Publisher: "Pocket",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0671021001.01.LZZZZZZZ.jpg",
+        predicted_rating: 4.1,
+        user_id: 5,
+      },
+      {
+        ISBN: "0385504209",
+        "Book-Title": "The Da Vinci Code",
+        "Year-Of-Publication": "2003",
+        "Book-Author": "Dan Brown",
+        Publisher: "Doubleday",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0385504209.01.LZZZZZZZ.jpg",
+        predicted_rating: 4.05,
+        user_id: 5,
+      },
+      {
+        ISBN: "0440241073",
+        "Book-Title": "The Summons",
+        "Year-Of-Publication": "2002",
+        "Book-Author": "John Grisham",
+        Publisher: "Dell Publishing Company",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0440241073.01.LZZZZZZZ.jpg",
+        predicted_rating: 3.91,
+        user_id: 5,
+      },
+      // Buku untuk User ID 10
+      {
+        ISBN: "0060987103",
+        "Book-Title":
+          "Wicked: The Life and Times of the Wicked Witch of the West",
+        "Year-Of-Publication": "1996",
+        "Book-Author": "Gregory Maguire",
+        Publisher: "Regan Books",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0060987103.01.LZZZZZZZ.jpg",
+        predicted_rating: 10.07,
+        user_id: 10,
+      },
+      {
+        ISBN: "0451205367",
+        "Book-Title": "Angels & Demons",
+        "Year-Of-Publication": "2001",
+        "Book-Author": "Dan Brown",
+        Publisher: "Pocket Star",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0451205367.01.LZZZZZZZ.jpg",
+        predicted_rating: 9.5,
+        user_id: 10,
+      },
+      // Buku untuk User ID 15
+      {
+        ISBN: "1400032717",
+        "Book-Title": "The Kite Runner",
+        "Year-Of-Publication": "2004",
+        "Book-Author": "Khaled Hosseini",
+        Publisher: "Riverhead Books",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/1400032717.01.LZZZZZZZ.jpg",
+        predicted_rating: 9.8,
+        user_id: 15,
+      },
+      // Buku umum (tanpa user_id khusus)
+      {
+        ISBN: "0439136350",
+        "Book-Title": "Harry Potter and the Prisoner of Azkaban",
+        "Year-Of-Publication": "2001",
+        "Book-Author": "J.K. Rowling",
+        Publisher: "Scholastic",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0439136350.01.LZZZZZZZ.jpg",
+        predicted_rating: 9.9,
+      },
+      {
+        ISBN: "0439139597",
+        "Book-Title": "Harry Potter and the Goblet of Fire",
+        "Year-Of-Publication": "2002",
+        "Book-Author": "J.K. Rowling",
+        Publisher: "Scholastic",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0439139597.01.LZZZZZZZ.jpg",
+        predicted_rating: 9.8,
+      },
+      {
+        ISBN: "0439784549",
+        "Book-Title": "Harry Potter and the Order of the Phoenix",
+        "Year-Of-Publication": "2004",
+        "Book-Author": "J.K. Rowling",
+        Publisher: "Scholastic",
+        "Image-URL-L":
+          "http://images.amazon.com/images/P/0439784549.01.LZZZZZZZ.jpg",
+        predicted_rating: 9.7,
+      },
+    ],
+    []
+  );
+
+  // Fungsi untuk mengambil rekomendasi dari API
   const fetchUserRecommendations = useCallback(
     async (userId, top_n = TOP_N_RECOMMENDATIONS) => {
       if (!userId) {
         setUserRecommendations([]);
+        setUserSpecificBooks([]);
         return [];
       }
 
@@ -85,7 +240,7 @@ function App() {
       try {
         console.log(`Fetching recommendations for user ${userId}...`);
         const response = await fetch(
-          `${API_BASE_URL}/recommend/${userId}?top_n=${top_n}`, // LANGSUNG KE BACKEND
+          `${API_BASE_URL}/recommend/${userId}?top_n=${top_n}`,
           {
             headers: {
               Accept: "application/json",
@@ -103,10 +258,38 @@ function App() {
         console.log("Recommendations data:", data);
 
         const recommendations = data.recommendations || [];
+
+        // Set rekomendasi untuk tab 1
         setUserRecommendations(recommendations);
 
+        // Filter buku yang sesuai dengan user untuk tab 0
+        const userBooks = DEMO_BOOKS.filter(
+          (book) =>
+            !book.user_id || // Buku umum tanpa user_id
+            book.user_id === userId || // Buku khusus untuk user ini
+            recommendations.some((rec) => rec.ISBN === book.ISBN) // Buku yang ada di rekomendasi
+        );
+
+        // Tambahkan buku dari API response ke userSpecificBooks
+        const apiBooks = recommendations.map((rec) => ({
+          ...rec,
+          user_id: userId,
+          is_from_api: true,
+        }));
+
+        // Gabungkan buku demo dan buku dari API
+        const combinedBooks = [...userBooks, ...apiBooks];
+
+        // Hapus duplikat berdasarkan ISBN
+        const uniqueBooks = Array.from(
+          new Map(combinedBooks.map((book) => [book.ISBN, book])).values()
+        );
+
+        setUserSpecificBooks(uniqueBooks);
+
+        // Jika ada rekomendasi, set tab aktif ke koleksi buku user
         if (recommendations.length > 0) {
-          setActiveTab(1);
+          setActiveTab(0); // Set ke tab Koleksi Buku User
         } else {
           setRecommendationError(
             "Tidak ada rekomendasi tersedia untuk pengguna ini"
@@ -118,12 +301,19 @@ function App() {
         console.error("Error fetching recommendations:", error);
         setRecommendationError(`Error: ${error.message}`);
         setUserRecommendations([]);
+
+        // Gunakan buku demo untuk user ini sebagai fallback
+        const userBooks = DEMO_BOOKS.filter(
+          (book) => !book.user_id || book.user_id === userId
+        );
+        setUserSpecificBooks(userBooks);
+
         return [];
       } finally {
         setLoadingRecommendations(false);
       }
     },
-    []
+    [DEMO_BOOKS]
   );
 
   // Load semua data awal
@@ -135,93 +325,8 @@ function App() {
     try {
       console.log("Memulai loading data...");
 
-      // Gunakan data dummy untuk popular books
-      const dummyBooks = [
-        {
-          ISBN: "0345417623",
-          "Book-Title": "Timeline",
-          "Year-Of-Publication": "2000",
-          "Book-Author": "MICHAEL CRICHTON",
-          Publisher: "Ballantine Books",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0345417623.01.LZZZZZZZ.jpg",
-          predicted_rating: 10.66,
-        },
-        {
-          ISBN: "0842329129",
-          "Book-Title": "Left Behind: A Novel of the Earth's Last Days",
-          "Year-Of-Publication": "1996",
-          "Book-Author": "Tim Lahaye",
-          Publisher: "Tyndale House Publishers",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0842329129.01.LZZZZZZZ.jpg",
-          predicted_rating: 10.17,
-        },
-        {
-          ISBN: "0060987103",
-          "Book-Title":
-            "Wicked: The Life and Times of the Wicked Witch of the West",
-          "Year-Of-Publication": "1996",
-          "Book-Author": "Gregory Maguire",
-          Publisher: "Regan Books",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0060987103.01.LZZZZZZZ.jpg",
-          predicted_rating: 10.07,
-        },
-        {
-          ISBN: "0312278586",
-          "Book-Title": "The Nanny Diaries: A Novel",
-          "Year-Of-Publication": "2002",
-          "Book-Author": "Emma McLaughlin",
-          Publisher: "St. Martin's Press",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0312278586.01.LZZZZZZZ.jpg",
-          predicted_rating: 4.97,
-        },
-        {
-          ISBN: "0142001740",
-          "Book-Title": "The Secret Life of Bees",
-          "Year-Of-Publication": "2003",
-          "Book-Author": "Sue Monk Kidd",
-          Publisher: "Penguin Books",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0142001740.01.LZZZZZZZ.jpg",
-          predicted_rating: 4.23,
-        },
-        {
-          ISBN: "0671021001",
-          "Book-Title": "She's Come Undone (Oprah's Book Club)",
-          "Year-Of-Publication": "1998",
-          "Book-Author": "Wally Lamb",
-          Publisher: "Pocket",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0671021001.01.LZZZZZZZ.jpg",
-          predicted_rating: 4.1,
-        },
-        {
-          ISBN: "0385504209",
-          "Book-Title": "The Da Vinci Code",
-          "Year-Of-Publication": "2003",
-          "Book-Author": "Dan Brown",
-          Publisher: "Doubleday",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0385504209.01.LZZZZZZZ.jpg",
-          predicted_rating: 4.05,
-        },
-        {
-          ISBN: "0440241073",
-          "Book-Title": "The Summons",
-          "Year-Of-Publication": "2002",
-          "Book-Author": "John Grisham",
-          Publisher: "Dell Publishing Company",
-          "Image-URL-L":
-            "http://images.amazon.com/images/P/0440241073.01.LZZZZZZZ.jpg",
-          predicted_rating: 3.91,
-        },
-      ];
-
-      setAllBooks(dummyBooks);
-      setFilteredBooks(dummyBooks);
+      // Set semua buku demo
+      setAllBooks(DEMO_BOOKS);
 
       // Set user pertama sebagai default
       if (users.length > 0) {
@@ -229,6 +334,10 @@ function App() {
         setSelectedUser(firstUser);
         // Otomatis fetch rekomendasi untuk user pertama
         await fetchUserRecommendations(firstUser["User-ID"]);
+      } else {
+        // Jika tidak ada user, tampilkan semua buku
+        setUserSpecificBooks(DEMO_BOOKS);
+        setFilteredBooks(DEMO_BOOKS);
       }
 
       setSnackbarOpen(true);
@@ -236,14 +345,20 @@ function App() {
       console.error("Failed to load data:", err);
       setError(`Gagal memuat data: ${err.message}`);
       setSnackbarOpen(true);
+
+      // Fallback ke data demo
+      setAllBooks(DEMO_BOOKS);
+      setUserSpecificBooks(DEMO_BOOKS);
+      setFilteredBooks(DEMO_BOOKS);
     } finally {
       setLoading(false);
     }
-  }, [fetchUserRecommendations, users]);
+  }, [DEMO_BOOKS, fetchUserRecommendations, users]);
 
   // Filter data buku berdasarkan kriteria
   const applyFilters = useCallback(() => {
-    let result = [...allBooks];
+    let result =
+      activeTab === 0 ? [...userSpecificBooks] : [...userRecommendations];
 
     // Filter berdasarkan pencarian
     if (searchQuery) {
@@ -304,7 +419,9 @@ function App() {
     setFilteredBooks(result);
     setCurrentPage(1);
   }, [
-    allBooks,
+    activeTab,
+    userSpecificBooks,
+    userRecommendations,
     searchQuery,
     yearFilter,
     authorFilter,
@@ -319,9 +436,8 @@ function App() {
     setAuthorFilter("");
     setPublisherFilter("");
     setSortBy("title");
-    setFilteredBooks(allBooks);
+    setFilteredBooks(activeTab === 0 ? userSpecificBooks : userRecommendations);
     setCurrentPage(1);
-    setActiveTab(0);
   };
 
   // Handler untuk ganti user
@@ -333,6 +449,13 @@ function App() {
   // Handler untuk ganti tab
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
+    // Reset filter ke data yang sesuai dengan tab
+    if (newValue === 0) {
+      setFilteredBooks(userSpecificBooks);
+    } else {
+      setFilteredBooks(userRecommendations);
+    }
+    setCurrentPage(1);
   };
 
   // Load data saat pertama kali render
@@ -342,17 +465,34 @@ function App() {
 
   // Terapkan filter ketika criteria berubah
   useEffect(() => {
-    if (allBooks.length > 0) {
+    if (
+      (activeTab === 0 && userSpecificBooks.length > 0) ||
+      (activeTab === 1 && userRecommendations.length > 0)
+    ) {
       applyFilters();
     }
-  }, [allBooks, applyFilters]);
+  }, [activeTab, userSpecificBooks, userRecommendations, applyFilters]);
+
+  // Update filteredBooks ketika userSpecificBooks berubah
+  useEffect(() => {
+    if (activeTab === 0 && userSpecificBooks.length > 0) {
+      setFilteredBooks(userSpecificBooks);
+    }
+  }, [activeTab, userSpecificBooks]);
+
+  // Update filteredBooks ketika userRecommendations berubah
+  useEffect(() => {
+    if (activeTab === 1 && userRecommendations.length > 0) {
+      setFilteredBooks(userRecommendations);
+    }
+  }, [activeTab, userRecommendations]);
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
   };
 
   // Tentukan data yang akan ditampilkan berdasarkan tab aktif
-  const displayBooks = activeTab === 0 ? filteredBooks : userRecommendations;
+  const displayBooks = filteredBooks;
 
   // Hitung pagination untuk data yang ditampilkan
   const totalPages = Math.ceil(displayBooks.length / itemsPerPage);
@@ -362,39 +502,55 @@ function App() {
 
   // Get unique authors dan publishers untuk filter dropdown
   const uniqueAuthors = useMemo(() => {
+    const booksToUse =
+      activeTab === 0 ? userSpecificBooks : userRecommendations;
     const authors = [
-      ...new Set(allBooks.map((book) => book["Book-Author"]).filter(Boolean)),
+      ...new Set(booksToUse.map((book) => book["Book-Author"]).filter(Boolean)),
     ];
     return authors.sort();
-  }, [allBooks]);
+  }, [activeTab, userSpecificBooks, userRecommendations]);
 
   const uniquePublishers = useMemo(() => {
+    const booksToUse =
+      activeTab === 0 ? userSpecificBooks : userRecommendations;
     const publishers = [
-      ...new Set(allBooks.map((book) => book.Publisher).filter(Boolean)),
+      ...new Set(booksToUse.map((book) => book.Publisher).filter(Boolean)),
     ];
     return publishers.sort();
-  }, [allBooks]);
+  }, [activeTab, userSpecificBooks, userRecommendations]);
 
   // Hitung statistik
   const stats = useMemo(() => {
-    const minYear = Math.min(
-      ...allBooks
-        .map((b) => parseInt(b["Year-Of-Publication"]) || 1900)
-        .filter((y) => y > 0)
-    );
-    const maxYear = Math.max(
-      ...allBooks.map((b) => parseInt(b["Year-Of-Publication"]) || 2024)
-    );
+    const booksToUse =
+      activeTab === 0 ? userSpecificBooks : userRecommendations;
+
+    const years = booksToUse
+      .map((b) => parseInt(b["Year-Of-Publication"]) || 0)
+      .filter((y) => y > 0);
+
+    const minYear = years.length > 0 ? Math.min(...years) : 1900;
+    const maxYear = years.length > 0 ? Math.max(...years) : 2024;
 
     return {
-      totalBooks: allBooks.length,
+      totalBooks: booksToUse.length,
       filteredBooks: filteredBooks.length,
       totalUsers: users.length,
       recommendationCount: userRecommendations.length,
       minYear: minYear === Infinity ? 1900 : minYear,
       maxYear: maxYear === -Infinity ? 2024 : maxYear,
     };
-  }, [allBooks, filteredBooks, users, userRecommendations]);
+  }, [activeTab, userSpecificBooks, userRecommendations, filteredBooks, users]);
+
+  // Judul tab berdasarkan user
+  const getTabLabel = () => {
+    if (activeTab === 0) {
+      return selectedUser
+        ? `Koleksi Buku User ${selectedUser["User-ID"]}`
+        : "Koleksi Buku";
+    } else {
+      return "Rekomendasi Personal";
+    }
+  };
 
   if (loading) {
     return (
@@ -432,7 +588,12 @@ function App() {
           severity={error ? "error" : "success"}
           variant="filled"
         >
-          {error || `Data berhasil dimuat! ${allBooks.length} buku tersedia`}
+          {error ||
+            `Data berhasil dimuat! ${
+              userSpecificBooks.length
+            } buku tersedia untuk user ${
+              selectedUser ? selectedUser["User-ID"] : "terpilih"
+            }`}
         </Alert>
       </Snackbar>
 
@@ -441,6 +602,7 @@ function App() {
         <Alert severity="info" sx={{ mb: 3 }}>
           <strong>Mode API Aktif:</strong> Terhubung langsung ke backend di{" "}
           {API_BASE_URL}
+          {selectedUser && ` | User Aktif: ${selectedUser["User-ID"]}`}
         </Alert>
 
         {/* Header Section */}
@@ -464,7 +626,7 @@ function App() {
                 Book Recommendation System
               </Typography>
               <Typography variant="h6" color="text.secondary">
-                {activeTab === 0 ? "Koleksi Buku" : "Rekomendasi Personal"}
+                {getTabLabel()}
               </Typography>
             </Box>
 
@@ -485,7 +647,7 @@ function App() {
                 {loadingRecommendations ? (
                   <CircularProgress size={20} color="inherit" />
                 ) : (
-                  "Dapatkan Rekomendasi"
+                  "Refresh Rekomendasi"
                 )}
               </Button>
               <Button
@@ -494,12 +656,12 @@ function App() {
                 onClick={loadAllData}
                 sx={{ borderRadius: 2 }}
               >
-                Refresh Data
+                Reset Semua
               </Button>
             </Box>
           </Box>
 
-          {/* Tabs untuk Semua Buku vs Rekomendasi */}
+          {/* Tabs untuk Koleksi Buku User vs Rekomendasi */}
           <Paper sx={{ mb: 3 }}>
             <Tabs
               value={activeTab}
@@ -513,7 +675,11 @@ function App() {
               }}
             >
               <Tab
-                label={`Koleksi Buku (${allBooks.length})`}
+                label={
+                  selectedUser
+                    ? `Buku User ${selectedUser["User-ID"]} (${userSpecificBooks.length})`
+                    : `Koleksi Buku (${userSpecificBooks.length})`
+                }
                 icon={<FilterListIcon />}
                 iconPosition="start"
               />
@@ -525,6 +691,44 @@ function App() {
               />
             </Tabs>
           </Paper>
+
+          {/* User Info Bar */}
+          {selectedUser && (
+            <Paper
+              sx={{
+                p: 2,
+                mb: 3,
+                bgcolor: "primary.light",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+              }}
+            >
+              <Box>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  User ID: {selectedUser["User-ID"]}
+                </Typography>
+                <Typography variant="body2">
+                  {selectedUser.Age && `Umur: ${selectedUser.Age} • `}
+                  {selectedUser.Location && `Lokasi: ${selectedUser.Location}`}
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <Chip
+                  label={`${userSpecificBooks.length} Buku`}
+                  size="small"
+                  sx={{ bgcolor: "white", color: "primary.main" }}
+                />
+                <Chip
+                  label={`${userRecommendations.length} Rekomendasi`}
+                  size="small"
+                  sx={{ bgcolor: "white", color: "secondary.main" }}
+                />
+              </Box>
+            </Paper>
+          )}
 
           {/* Stats Bar */}
           <Paper
@@ -539,22 +743,22 @@ function App() {
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Chip
-                label={activeTab === 0 ? "KOLEKSI" : "REKOMENDASI"}
+                label={activeTab === 0 ? "KOLEKSI USER" : "REKOMENDASI"}
                 color={activeTab === 0 ? "primary" : "secondary"}
                 size="small"
               />
               <Typography variant="body2">
                 {activeTab === 0
-                  ? `${allBooks.length} buku`
-                  : `${userRecommendations.length} rekomendasi`}
+                  ? `${userSpecificBooks.length} buku untuk user ${
+                      selectedUser ? selectedUser["User-ID"] : ""
+                    }`
+                  : `${userRecommendations.length} rekomendasi personal`}
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Chip label="FILTER" color="info" size="small" />
               <Typography variant="body2">
-                {activeTab === 0
-                  ? `${filteredBooks.length} hasil`
-                  : "Rekomendasi personal"}
+                {filteredBooks.length} hasil
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -563,11 +767,11 @@ function App() {
                 Halaman {currentPage} dari {totalPages}
               </Typography>
             </Box>
-            {activeTab === 1 && selectedUser && (
+            {selectedUser && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Chip label="USER" color="success" size="small" />
                 <Typography variant="body2">
-                  User ID: {selectedUser["User-ID"]}
+                  ID: {selectedUser["User-ID"]}
                 </Typography>
               </Box>
             )}
@@ -604,6 +808,19 @@ function App() {
                 </Tooltip>
               </Box>
 
+              {/* User Info in Sidebar */}
+              {selectedUser && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">
+                    User: {selectedUser["User-ID"]}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    {selectedUser.Age && `Umur: ${selectedUser.Age}`}
+                    {selectedUser.Location && ` • ${selectedUser.Location}`}
+                  </Typography>
+                </Alert>
+              )}
+
               {/* Search Box */}
               <TextField
                 fullWidth
@@ -612,7 +829,6 @@ function App() {
                 size="small"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                disabled={activeTab === 1}
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -632,7 +848,6 @@ function App() {
                 min={stats.minYear}
                 max={stats.maxYear}
                 step={1}
-                disabled={activeTab === 1}
                 sx={{ mb: 3 }}
               />
 
@@ -643,7 +858,6 @@ function App() {
                   value={authorFilter}
                   label="Penulis"
                   onChange={(e) => setAuthorFilter(e.target.value)}
-                  disabled={activeTab === 1}
                 >
                   <MenuItem value="">Semua Penulis</MenuItem>
                   {uniqueAuthors.slice(0, 20).map((author) => (
@@ -661,7 +875,6 @@ function App() {
                   value={publisherFilter}
                   label="Penerbit"
                   onChange={(e) => setPublisherFilter(e.target.value)}
-                  disabled={activeTab === 1}
                 >
                   <MenuItem value="">Semua Penerbit</MenuItem>
                   {uniquePublishers.slice(0, 20).map((publisher) => (
@@ -679,7 +892,6 @@ function App() {
                   value={sortBy}
                   label="Urutkan Berdasarkan"
                   onChange={(e) => setSortBy(e.target.value)}
-                  disabled={activeTab === 1}
                 >
                   <MenuItem value="title">Judul (A-Z)</MenuItem>
                   <MenuItem value="author">Penulis (A-Z)</MenuItem>
@@ -709,7 +921,6 @@ function App() {
                 fullWidth
                 variant="contained"
                 onClick={applyFilters}
-                disabled={activeTab === 1}
                 sx={{ mb: 3 }}
               >
                 Terapkan Filter
@@ -735,11 +946,23 @@ function App() {
 
           {/* Main Content */}
           <Grid item xs={12} md={9}>
-            {/* Tab Info */}
-            {activeTab === 1 && selectedUser && (
+            {/* Tab Description */}
+            {activeTab === 0 ? (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <strong>
-                  Rekomendasi Personal untuk User ID: {selectedUser["User-ID"]}
+                  {selectedUser
+                    ? `Koleksi Buku untuk User ${selectedUser["User-ID"]}`
+                    : "Koleksi Buku"}
+                </strong>
+                <br />
+                {selectedUser
+                  ? `Menampilkan buku-buku yang sesuai dengan preferensi dan rekomendasi untuk User ${selectedUser["User-ID"]}. Termasuk buku dari rekomendasi API dan koleksi khusus user.`
+                  : "Menampilkan koleksi buku yang tersedia."}
+              </Alert>
+            ) : (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <strong>
+                  Rekomendasi Personal untuk User {selectedUser?.["User-ID"]}
                 </strong>
                 <br />
                 Buku-buku ini direkomendasikan khusus untuk Anda berdasarkan
@@ -761,7 +984,8 @@ function App() {
               <Typography variant="body1">
                 Menampilkan {startIndex + 1}-
                 {Math.min(endIndex, displayBooks.length)} dari{" "}
-                {displayBooks.length} {activeTab === 0 ? "buku" : "rekomendasi"}
+                {displayBooks.length}{" "}
+                {activeTab === 0 ? "buku dalam koleksi" : "rekomendasi"}
               </Typography>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Button
@@ -802,29 +1026,18 @@ function App() {
                 <CardContent>
                   <Typography variant="h6" color="text.secondary" gutterBottom>
                     {activeTab === 0
-                      ? "Tidak ada buku yang sesuai dengan filter"
-                      : "Tidak ada rekomendasi tersedia. Coba pilih user lain atau klik 'Dapatkan Rekomendasi'"}
+                      ? selectedUser
+                        ? "Tidak ada buku yang sesuai dengan filter untuk user ini"
+                        : "Tidak ada buku yang sesuai dengan filter"
+                      : "Tidak ada rekomendasi tersedia. Coba pilih user lain atau klik 'Refresh Rekomendasi'"}
                   </Typography>
-                  {activeTab === 0 ? (
-                    <Button
-                      variant="outlined"
-                      onClick={resetFilters}
-                      sx={{ mt: 2 }}
-                    >
-                      Reset Filter
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        setActiveTab(0);
-                        resetFilters();
-                      }}
-                      sx={{ mt: 2 }}
-                    >
-                      Lihat Koleksi Buku
-                    </Button>
-                  )}
+                  <Button
+                    variant="outlined"
+                    onClick={resetFilters}
+                    sx={{ mt: 2 }}
+                  >
+                    Reset Filter
+                  </Button>
                 </CardContent>
               </Card>
             ) : (
@@ -836,7 +1049,7 @@ function App() {
                     sm={6}
                     md={4}
                     lg={3}
-                    key={book.ISBN || index}
+                    key={`${book.ISBN}-${index}`}
                   >
                     <BookCard
                       book={book}
@@ -909,6 +1122,13 @@ function App() {
               <Typography variant="body2" color="text.secondary">
                 <strong>API Information:</strong> Terhubung langsung ke backend
                 recommendation system di {API_BASE_URL}
+                {selectedUser && (
+                  <>
+                    <br />
+                    <strong>Endpoint aktif:</strong> /recommend/
+                    {selectedUser["User-ID"]}
+                  </>
+                )}
               </Typography>
             </Card>
           </Grid>
@@ -935,13 +1155,14 @@ function App() {
                 display="block"
               >
                 Backend URL: {API_BASE_URL}
+                {selectedUser && ` | User Aktif: ${selectedUser["User-ID"]}`}
               </Typography>
             </Grid>
             <Grid item xs={12} md={6} sx={{ textAlign: "right" }}>
               <Typography variant="caption" color="text.disabled">
                 Render time: {new Date().toLocaleTimeString()} | Mode:{" "}
-                {activeTab === 0 ? "Collection" : "Recommendations"} | Items
-                loaded: {currentBooks.length} | Active user:{" "}
+                {activeTab === 0 ? "User Collection" : "Recommendations"} |
+                Items loaded: {currentBooks.length} | Active user:{" "}
                 {selectedUser ? `ID: ${selectedUser["User-ID"]}` : "None"}
               </Typography>
             </Grid>
