@@ -14,7 +14,7 @@ const Header = () => {
           component="div"
           sx={{ flexGrow: 1, fontWeight: "bold" }}
         >
-          BookVerse
+          BlueBook
         </Typography>
 
         <Box sx={{ display: "flex", alignItems: "center" }}>

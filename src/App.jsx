@@ -20,73 +20,34 @@ import {
   CardContent,
   IconButton,
   Tooltip,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
+import RecommendIcon from "@mui/icons-material/Recommend";
 import Header from "./components/Header";
 import BookCard from "./components/BookCard";
 import RecommendationSection from "./components/RecommendationSection";
 import UserProfile from "./components/UserProfile";
 import "./styles/App.css";
 
-// CSV Parser yang dioptimalkan dengan limit
-const parseCSV = (csvText, limit = 50) => {
-  try {
-    const lines = csvText.split("\n").filter((line) => line.trim() !== "");
-    if (lines.length <= 1) return []; // Hanya header
-
-    const headers = lines[0].split(",").map((header) => header.trim());
-    const data = [];
-
-    // Ambil hanya sejumlah data sesuai limit
-    for (let i = 1; i < Math.min(lines.length, limit + 1); i++) {
-      const line = lines[i];
-      const values = [];
-      let currentValue = "";
-      let inQuotes = false;
-
-      for (let char of line) {
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === "," && !inQuotes) {
-          values.push(currentValue);
-          currentValue = "";
-        } else {
-          currentValue += char;
-        }
-      }
-      values.push(currentValue);
-
-      const row = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index] ? values[index].trim() : "";
-      });
-
-      // Hanya tambahkan jika ada data penting
-      if (row.ISBN || row["User-ID"]) {
-        data.push(row);
-      }
-    }
-
-    return data;
-  } catch (error) {
-    console.error("Error parsing CSV:", error);
-    return [];
-  }
-};
+// Konfigurasi API - LANGSUNG KE BACKEND
+const API_BASE_URL = "http://192.168.215.87:8000"; // URL backend langsung
+const TOP_N_RECOMMENDATIONS = 10;
 
 function App() {
-  const [books, setBooks] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [ratings, setRatings] = useState([]);
+  const [allBooks, setAllBooks] = useState([]);
+  const [userRecommendations, setUserRecommendations] = useState([]);
   const [filteredBooks, setFilteredBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [error, setError] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [usingDefaultData, setUsingDefaultData] = useState(false);
+  const [recommendationError, setRecommendationError] = useState("");
 
   // State untuk filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,80 +57,193 @@ function App() {
   const [sortBy, setSortBy] = useState("title");
   const [itemsPerPage, setItemsPerPage] = useState(12);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState(0);
 
-  // Fungsi untuk membaca file CSV dengan limit
-  const loadCSVFile = useCallback(async (filename, limit = 50) => {
-    try {
-      const response = await fetch(`/data/${filename}`);
+  // Daftar user dummy untuk dipilih
+  const [users] = useState([
+    { "User-ID": 2, Age: 35, Location: "New York, USA" },
+    { "User-ID": 5, Age: 28, Location: "London, UK" },
+    { "User-ID": 10, Age: 42, Location: "Tokyo, Japan" },
+    { "User-ID": 15, Age: 31, Location: "Sydney, Australia" },
+    { "User-ID": 20, Age: 25, Location: "Berlin, Germany" },
+    { "User-ID": 25, Age: 38, Location: "Paris, France" },
+    { "User-ID": 30, Age: 45, Location: "Toronto, Canada" },
+    { "User-ID": 35, Age: 29, Location: "Singapore" },
+  ]);
 
-      if (!response.ok) {
-        throw new Error(`File ${filename} tidak ditemukan`);
+  // Fungsi untuk mengambil rekomendasi berdasarkan user_id
+  const fetchUserRecommendations = useCallback(
+    async (userId, top_n = TOP_N_RECOMMENDATIONS) => {
+      if (!userId) {
+        setUserRecommendations([]);
+        return [];
       }
 
-      const csvText = await response.text();
-      const data = parseCSV(csvText, limit);
+      setLoadingRecommendations(true);
+      setRecommendationError("");
 
-      if (data.length === 0) {
-        console.warn(`File ${filename} kosong atau format salah`);
+      try {
+        console.log(`Fetching recommendations for user ${userId}...`);
+        const response = await fetch(
+          `${API_BASE_URL}/recommend/${userId}?top_n=${top_n}`, // LANGSUNG KE BACKEND
+          {
+            headers: {
+              Accept: "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Gagal mengambil rekomendasi (Status: ${response.status})`
+          );
+        }
+
+        const data = await response.json();
+        console.log("Recommendations data:", data);
+
+        const recommendations = data.recommendations || [];
+        setUserRecommendations(recommendations);
+
+        if (recommendations.length > 0) {
+          setActiveTab(1);
+        } else {
+          setRecommendationError(
+            "Tidak ada rekomendasi tersedia untuk pengguna ini"
+          );
+        }
+
+        return recommendations;
+      } catch (error) {
+        console.error("Error fetching recommendations:", error);
+        setRecommendationError(`Error: ${error.message}`);
+        setUserRecommendations([]);
+        return [];
+      } finally {
+        setLoadingRecommendations(false);
       }
+    },
+    []
+  );
 
-      return data;
-    } catch (err) {
-      console.warn(`Error loading ${filename}:`, err.message);
-      return [];
-    }
-  }, []);
-
-  // Load semua data dengan limit
+  // Load semua data awal
   const loadAllData = useCallback(async () => {
     setLoading(true);
     setError("");
+    setUserRecommendations([]);
 
     try {
-      console.log("Memulai loading data dengan limit...");
+      console.log("Memulai loading data...");
 
-      // Set limit untuk masing-masing file
-      const booksLimit = 1000; // Max 100 buku
-      const usersLimit = 30; // Max 20 user
-      const ratingsLimit = 300; // Max 200 rating
+      // Gunakan data dummy untuk popular books
+      const dummyBooks = [
+        {
+          ISBN: "0345417623",
+          "Book-Title": "Timeline",
+          "Year-Of-Publication": "2000",
+          "Book-Author": "MICHAEL CRICHTON",
+          Publisher: "Ballantine Books",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0345417623.01.LZZZZZZZ.jpg",
+          predicted_rating: 10.66,
+        },
+        {
+          ISBN: "0842329129",
+          "Book-Title": "Left Behind: A Novel of the Earth's Last Days",
+          "Year-Of-Publication": "1996",
+          "Book-Author": "Tim Lahaye",
+          Publisher: "Tyndale House Publishers",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0842329129.01.LZZZZZZZ.jpg",
+          predicted_rating: 10.17,
+        },
+        {
+          ISBN: "0060987103",
+          "Book-Title":
+            "Wicked: The Life and Times of the Wicked Witch of the West",
+          "Year-Of-Publication": "1996",
+          "Book-Author": "Gregory Maguire",
+          Publisher: "Regan Books",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0060987103.01.LZZZZZZZ.jpg",
+          predicted_rating: 10.07,
+        },
+        {
+          ISBN: "0312278586",
+          "Book-Title": "The Nanny Diaries: A Novel",
+          "Year-Of-Publication": "2002",
+          "Book-Author": "Emma McLaughlin",
+          Publisher: "St. Martin's Press",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0312278586.01.LZZZZZZZ.jpg",
+          predicted_rating: 4.97,
+        },
+        {
+          ISBN: "0142001740",
+          "Book-Title": "The Secret Life of Bees",
+          "Year-Of-Publication": "2003",
+          "Book-Author": "Sue Monk Kidd",
+          Publisher: "Penguin Books",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0142001740.01.LZZZZZZZ.jpg",
+          predicted_rating: 4.23,
+        },
+        {
+          ISBN: "0671021001",
+          "Book-Title": "She's Come Undone (Oprah's Book Club)",
+          "Year-Of-Publication": "1998",
+          "Book-Author": "Wally Lamb",
+          Publisher: "Pocket",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0671021001.01.LZZZZZZZ.jpg",
+          predicted_rating: 4.1,
+        },
+        {
+          ISBN: "0385504209",
+          "Book-Title": "The Da Vinci Code",
+          "Year-Of-Publication": "2003",
+          "Book-Author": "Dan Brown",
+          Publisher: "Doubleday",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0385504209.01.LZZZZZZZ.jpg",
+          predicted_rating: 4.05,
+        },
+        {
+          ISBN: "0440241073",
+          "Book-Title": "The Summons",
+          "Year-Of-Publication": "2002",
+          "Book-Author": "John Grisham",
+          Publisher: "Dell Publishing Company",
+          "Image-URL-L":
+            "http://images.amazon.com/images/P/0440241073.01.LZZZZZZZ.jpg",
+          predicted_rating: 3.91,
+        },
+      ];
 
-      // Load data
-      const booksData = await loadCSVFile("books.csv", booksLimit);
-      const usersData = await loadCSVFile("users.csv", usersLimit);
-      const ratingsData = await loadCSVFile("ratings.csv", ratingsLimit);
+      setAllBooks(dummyBooks);
+      setFilteredBooks(dummyBooks);
 
-      console.log(
-        `Data loaded: ${booksData.length} buku, ${usersData.length} user, ${ratingsData.length} rating`
-      );
-
-      if (booksData.length === 0) {
-        throw new Error("Data buku kosong atau format salah");
+      // Set user pertama sebagai default
+      if (users.length > 0) {
+        const firstUser = users[0];
+        setSelectedUser(firstUser);
+        // Otomatis fetch rekomendasi untuk user pertama
+        await fetchUserRecommendations(firstUser["User-ID"]);
       }
 
-      setBooks(booksData);
-      setFilteredBooks(booksData); // Set filtered books awal sama dengan semua books
-      setUsers(usersData);
-      setRatings(ratingsData);
-
-      if (usersData.length > 0) {
-        setSelectedUser(usersData[0]);
-      }
-
-      setUsingDefaultData(false);
       setSnackbarOpen(true);
     } catch (err) {
-      console.error("Failed to load CSV files:", err);
+      console.error("Failed to load data:", err);
       setError(`Gagal memuat data: ${err.message}`);
       setSnackbarOpen(true);
-      setUsingDefaultData(true);
     } finally {
       setLoading(false);
     }
-  }, [loadCSVFile]);
+  }, [fetchUserRecommendations, users]);
 
   // Filter data buku berdasarkan kriteria
   const applyFilters = useCallback(() => {
-    let result = [...books];
+    let result = [...allBooks];
 
     // Filter berdasarkan pencarian
     if (searchQuery) {
@@ -183,7 +257,7 @@ function App() {
       );
     }
 
-    // Filter berdasarkan tahun
+    // Filter berdasarkan tahun (hanya untuk buku yang memiliki tahun)
     result = result.filter((book) => {
       const year = parseInt(book["Year-Of-Publication"]) || 0;
       return year >= yearFilter[0] && year <= yearFilter[1];
@@ -220,14 +294,23 @@ function App() {
             (parseInt(a["Year-Of-Publication"]) || 0) -
             (parseInt(b["Year-Of-Publication"]) || 0)
           );
+        case "rating-desc":
+          return (b.predicted_rating || 0) - (a.predicted_rating || 0);
         default:
           return 0;
       }
     });
 
     setFilteredBooks(result);
-    setCurrentPage(1); // Reset ke halaman pertama saat filter berubah
-  }, [books, searchQuery, yearFilter, authorFilter, publisherFilter, sortBy]);
+    setCurrentPage(1);
+  }, [
+    allBooks,
+    searchQuery,
+    yearFilter,
+    authorFilter,
+    publisherFilter,
+    sortBy,
+  ]);
 
   // Reset semua filter
   const resetFilters = () => {
@@ -236,8 +319,20 @@ function App() {
     setAuthorFilter("");
     setPublisherFilter("");
     setSortBy("title");
-    setFilteredBooks(books);
+    setFilteredBooks(allBooks);
     setCurrentPage(1);
+    setActiveTab(0);
+  };
+
+  // Handler untuk ganti user
+  const handleUserSelect = async (user) => {
+    setSelectedUser(user);
+    await fetchUserRecommendations(user["User-ID"]);
+  };
+
+  // Handler untuk ganti tab
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
 
   // Load data saat pertama kali render
@@ -247,63 +342,59 @@ function App() {
 
   // Terapkan filter ketika criteria berubah
   useEffect(() => {
-    if (books.length > 0) {
+    if (allBooks.length > 0) {
       applyFilters();
     }
-  }, [books, applyFilters]);
+  }, [allBooks, applyFilters]);
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
   };
 
-  // Hitung pagination
-  const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
+  // Tentukan data yang akan ditampilkan berdasarkan tab aktif
+  const displayBooks = activeTab === 0 ? filteredBooks : userRecommendations;
+
+  // Hitung pagination untuk data yang ditampilkan
+  const totalPages = Math.ceil(displayBooks.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentBooks = filteredBooks.slice(startIndex, endIndex);
+  const currentBooks = displayBooks.slice(startIndex, endIndex);
 
   // Get unique authors dan publishers untuk filter dropdown
   const uniqueAuthors = useMemo(() => {
     const authors = [
-      ...new Set(books.map((book) => book["Book-Author"]).filter(Boolean)),
+      ...new Set(allBooks.map((book) => book["Book-Author"]).filter(Boolean)),
     ];
     return authors.sort();
-  }, [books]);
+  }, [allBooks]);
 
   const uniquePublishers = useMemo(() => {
     const publishers = [
-      ...new Set(books.map((book) => book.Publisher).filter(Boolean)),
+      ...new Set(allBooks.map((book) => book.Publisher).filter(Boolean)),
     ];
     return publishers.sort();
-  }, [books]);
+  }, [allBooks]);
 
   // Hitung statistik
-  const stats = useMemo(
-    () => ({
-      totalBooks: books.length,
+  const stats = useMemo(() => {
+    const minYear = Math.min(
+      ...allBooks
+        .map((b) => parseInt(b["Year-Of-Publication"]) || 1900)
+        .filter((y) => y > 0)
+    );
+    const maxYear = Math.max(
+      ...allBooks.map((b) => parseInt(b["Year-Of-Publication"]) || 2024)
+    );
+
+    return {
+      totalBooks: allBooks.length,
       filteredBooks: filteredBooks.length,
       totalUsers: users.length,
-      totalRatings: ratings.length,
-      averageRating:
-        ratings.length > 0
-          ? (
-              ratings.reduce(
-                (sum, r) => sum + parseInt(r["Book-Rating"] || 0),
-                0
-              ) / ratings.length
-            ).toFixed(1)
-          : "0.0",
-      minYear: Math.min(
-        ...books
-          .map((b) => parseInt(b["Year-Of-Publication"]) || 1900)
-          .filter((y) => y > 0)
-      ),
-      maxYear: Math.max(
-        ...books.map((b) => parseInt(b["Year-Of-Publication"]) || 2024)
-      ),
-    }),
-    [books, filteredBooks, users, ratings]
-  );
+      recommendationCount: userRecommendations.length,
+      minYear: minYear === Infinity ? 1900 : minYear,
+      maxYear: maxYear === -Infinity ? 2024 : maxYear,
+    };
+  }, [allBooks, filteredBooks, users, userRecommendations]);
 
   if (loading) {
     return (
@@ -317,10 +408,10 @@ function App() {
       >
         <CircularProgress size={80} />
         <Typography variant="h5" color="primary">
-          Memuat Data (Limit: 100 buku, 20 user, 200 rating)
+          Memuat Data...
         </Typography>
         <Typography variant="body2" color="text.secondary" align="center">
-          Mengoptimalkan performa dengan membatasi data
+          Mengambil data buku dan rekomendasi personal
         </Typography>
       </Box>
     );
@@ -341,19 +432,16 @@ function App() {
           severity={error ? "error" : "success"}
           variant="filled"
         >
-          {error ||
-            `Data berhasil dimuat! ${books.length} buku, ${users.length} user, ${ratings.length} rating`}
+          {error || `Data berhasil dimuat! ${allBooks.length} buku tersedia`}
         </Alert>
       </Snackbar>
 
       <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
-        {/* Performance Warning */}
-        {books.length > 50 && (
-          <Alert severity="info" sx={{ mb: 3 }}>
-            <strong>Mode Performa Aktif:</strong> Menampilkan {books.length}{" "}
-            dari total data. Gunakan filter untuk hasil spesifik.
-          </Alert>
-        )}
+        {/* API Info */}
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <strong>Mode API Aktif:</strong> Terhubung langsung ke backend di{" "}
+          {API_BASE_URL}
+        </Alert>
 
         {/* Header Section */}
         <Box sx={{ mb: 4 }}>
@@ -373,22 +461,70 @@ function App() {
                 color="primary"
                 sx={{ fontWeight: "bold" }}
               >
-                Etalase Buku (Optimized)
+                Book Recommendation System
               </Typography>
               <Typography variant="h6" color="text.secondary">
-                Data difilter untuk performa optimal
+                {activeTab === 0 ? "Koleksi Buku" : "Rekomendasi Personal"}
               </Typography>
             </Box>
 
-            <Button
-              variant="contained"
-              startIcon={<RefreshIcon />}
-              onClick={loadAllData}
-              sx={{ borderRadius: 2 }}
-            >
-              Muat Ulang
-            </Button>
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <Button
+                variant="contained"
+                startIcon={<RecommendIcon />}
+                onClick={() => {
+                  if (selectedUser) {
+                    fetchUserRecommendations(selectedUser["User-ID"]);
+                  } else {
+                    setRecommendationError("Pilih user terlebih dahulu");
+                  }
+                }}
+                disabled={!selectedUser || loadingRecommendations}
+                sx={{ borderRadius: 2 }}
+              >
+                {loadingRecommendations ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Dapatkan Rekomendasi"
+                )}
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={loadAllData}
+                sx={{ borderRadius: 2 }}
+              >
+                Refresh Data
+              </Button>
+            </Box>
           </Box>
+
+          {/* Tabs untuk Semua Buku vs Rekomendasi */}
+          <Paper sx={{ mb: 3 }}>
+            <Tabs
+              value={activeTab}
+              onChange={handleTabChange}
+              centered
+              sx={{
+                "& .MuiTab-root": {
+                  fontWeight: "bold",
+                  fontSize: "1rem",
+                },
+              }}
+            >
+              <Tab
+                label={`Koleksi Buku (${allBooks.length})`}
+                icon={<FilterListIcon />}
+                iconPosition="start"
+              />
+              <Tab
+                label={`Rekomendasi (${userRecommendations.length})`}
+                icon={<RecommendIcon />}
+                iconPosition="start"
+                disabled={userRecommendations.length === 0}
+              />
+            </Tabs>
+          </Paper>
 
           {/* Stats Bar */}
           <Paper
@@ -402,26 +538,51 @@ function App() {
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Chip label="TOTAL" color="primary" size="small" />
-              <Typography variant="body2">{books.length} buku</Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Chip label="FILTER" color="secondary" size="small" />
+              <Chip
+                label={activeTab === 0 ? "KOLEKSI" : "REKOMENDASI"}
+                color={activeTab === 0 ? "primary" : "secondary"}
+                size="small"
+              />
               <Typography variant="body2">
-                {filteredBooks.length} hasil
+                {activeTab === 0
+                  ? `${allBooks.length} buku`
+                  : `${userRecommendations.length} rekomendasi`}
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Chip label="PAGE" color="info" size="small" />
+              <Chip label="FILTER" color="info" size="small" />
+              <Typography variant="body2">
+                {activeTab === 0
+                  ? `${filteredBooks.length} hasil`
+                  : "Rekomendasi personal"}
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Chip label="PAGE" color="warning" size="small" />
               <Typography variant="body2">
                 Halaman {currentPage} dari {totalPages}
               </Typography>
             </Box>
+            {activeTab === 1 && selectedUser && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Chip label="USER" color="success" size="small" />
+                <Typography variant="body2">
+                  User ID: {selectedUser["User-ID"]}
+                </Typography>
+              </Box>
+            )}
             <Box sx={{ flexGrow: 1 }} />
             <Typography variant="caption" color="text.secondary">
-              Data dibatasi untuk performa: 100 buku, 20 user, 200 rating
+              Backend: {API_BASE_URL}
             </Typography>
           </Paper>
+
+          {/* Error message untuk rekomendasi */}
+          {recommendationError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {recommendationError}
+            </Alert>
+          )}
         </Box>
 
         <Grid container spacing={3}>
@@ -451,6 +612,7 @@ function App() {
                 size="small"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                disabled={activeTab === 1}
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -470,6 +632,7 @@ function App() {
                 min={stats.minYear}
                 max={stats.maxYear}
                 step={1}
+                disabled={activeTab === 1}
                 sx={{ mb: 3 }}
               />
 
@@ -480,6 +643,7 @@ function App() {
                   value={authorFilter}
                   label="Penulis"
                   onChange={(e) => setAuthorFilter(e.target.value)}
+                  disabled={activeTab === 1}
                 >
                   <MenuItem value="">Semua Penulis</MenuItem>
                   {uniqueAuthors.slice(0, 20).map((author) => (
@@ -497,6 +661,7 @@ function App() {
                   value={publisherFilter}
                   label="Penerbit"
                   onChange={(e) => setPublisherFilter(e.target.value)}
+                  disabled={activeTab === 1}
                 >
                   <MenuItem value="">Semua Penerbit</MenuItem>
                   {uniquePublishers.slice(0, 20).map((publisher) => (
@@ -514,11 +679,15 @@ function App() {
                   value={sortBy}
                   label="Urutkan Berdasarkan"
                   onChange={(e) => setSortBy(e.target.value)}
+                  disabled={activeTab === 1}
                 >
                   <MenuItem value="title">Judul (A-Z)</MenuItem>
                   <MenuItem value="author">Penulis (A-Z)</MenuItem>
                   <MenuItem value="year-desc">Tahun Terbit (Terbaru)</MenuItem>
                   <MenuItem value="year-asc">Tahun Terbit (Terlama)</MenuItem>
+                  <MenuItem value="rating-desc">
+                    Rating Prediksi (Tertinggi)
+                  </MenuItem>
                 </Select>
               </FormControl>
 
@@ -540,6 +709,7 @@ function App() {
                 fullWidth
                 variant="contained"
                 onClick={applyFilters}
+                disabled={activeTab === 1}
                 sx={{ mb: 3 }}
               >
                 Terapkan Filter
@@ -549,14 +719,15 @@ function App() {
               <UserProfile
                 users={users}
                 selectedUser={selectedUser}
-                onSelectUser={setSelectedUser}
+                onSelectUser={handleUserSelect}
               />
 
+              {/* Recommendation Section di Sidebar */}
               <Box sx={{ mt: 3 }}>
                 <RecommendationSection
-                  books={filteredBooks.slice(0, 5)} // Hanya 5 rekomendasi
-                  ratings={ratings}
                   selectedUser={selectedUser}
+                  userRecommendations={userRecommendations.slice(0, 3)}
+                  title="Rekomendasi Teratas"
                 />
               </Box>
             </Paper>
@@ -564,6 +735,19 @@ function App() {
 
           {/* Main Content */}
           <Grid item xs={12} md={9}>
+            {/* Tab Info */}
+            {activeTab === 1 && selectedUser && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <strong>
+                  Rekomendasi Personal untuk User ID: {selectedUser["User-ID"]}
+                </strong>
+                <br />
+                Buku-buku ini direkomendasikan khusus untuk Anda berdasarkan
+                algoritma recommendation system. Prediksi rating menunjukkan
+                seberapa besar kemungkinan Anda menyukai buku tersebut.
+              </Alert>
+            )}
+
             {/* Pagination Controls */}
             <Paper
               sx={{
@@ -576,8 +760,8 @@ function App() {
             >
               <Typography variant="body1">
                 Menampilkan {startIndex + 1}-
-                {Math.min(endIndex, filteredBooks.length)} dari{" "}
-                {filteredBooks.length} buku
+                {Math.min(endIndex, displayBooks.length)} dari{" "}
+                {displayBooks.length} {activeTab === 0 ? "buku" : "rekomendasi"}
               </Typography>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Button
@@ -617,15 +801,30 @@ function App() {
               <Card sx={{ p: 4, textAlign: "center" }}>
                 <CardContent>
                   <Typography variant="h6" color="text.secondary" gutterBottom>
-                    Tidak ada buku yang sesuai dengan filter
+                    {activeTab === 0
+                      ? "Tidak ada buku yang sesuai dengan filter"
+                      : "Tidak ada rekomendasi tersedia. Coba pilih user lain atau klik 'Dapatkan Rekomendasi'"}
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    onClick={resetFilters}
-                    sx={{ mt: 2 }}
-                  >
-                    Reset Filter
-                  </Button>
+                  {activeTab === 0 ? (
+                    <Button
+                      variant="outlined"
+                      onClick={resetFilters}
+                      sx={{ mt: 2 }}
+                    >
+                      Reset Filter
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setActiveTab(0);
+                        resetFilters();
+                      }}
+                      sx={{ mt: 2 }}
+                    >
+                      Lihat Koleksi Buku
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -641,8 +840,10 @@ function App() {
                   >
                     <BookCard
                       book={book}
-                      ratings={ratings}
-                      selectedUser={selectedUser}
+                      isRecommendation={activeTab === 1}
+                      predictedRating={
+                        activeTab === 1 ? book.predicted_rating : null
+                      }
                     />
                   </Grid>
                 ))}
@@ -650,7 +851,7 @@ function App() {
             )}
 
             {/* Bottom Pagination */}
-            {filteredBooks.length > itemsPerPage && (
+            {displayBooks.length > itemsPerPage && (
               <Paper
                 sx={{ p: 2, mt: 3, display: "flex", justifyContent: "center" }}
               >
@@ -703,12 +904,11 @@ function App() {
               </Paper>
             )}
 
-            {/* Performance Info */}
+            {/* API Info */}
             <Card sx={{ mt: 4, p: 2, bgcolor: "grey.50" }}>
               <Typography variant="body2" color="text.secondary">
-                <strong>Info Performa:</strong> Aplikasi ini menggunakan limit
-                data untuk mencegah "web not responding". Data ditampilkan per
-                halaman dengan filter yang efisien.
+                <strong>API Information:</strong> Terhubung langsung ke backend
+                recommendation system di {API_BASE_URL}
               </Typography>
             </Card>
           </Grid>
@@ -727,21 +927,22 @@ function App() {
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <Typography variant="body2" color="text.secondary">
-                © 2024 Book Recommendation System | Optimized Version
+                © 2024 Book Recommendation System | Direct API Connection
               </Typography>
               <Typography
                 variant="caption"
+                color="text.disabled"
                 display="block"
-                sx={{ mt: 1, color: "text.disabled" }}
               >
-                Data limit: 100 buku | 20 user | 200 rating | Pagination:{" "}
-                {itemsPerPage}/page
+                Backend URL: {API_BASE_URL}
               </Typography>
             </Grid>
             <Grid item xs={12} md={6} sx={{ textAlign: "right" }}>
               <Typography variant="caption" color="text.disabled">
-                Render time: {new Date().toLocaleTimeString()} | Items loaded:{" "}
-                {currentBooks.length} | Total filtered: {filteredBooks.length}
+                Render time: {new Date().toLocaleTimeString()} | Mode:{" "}
+                {activeTab === 0 ? "Collection" : "Recommendations"} | Items
+                loaded: {currentBooks.length} | Active user:{" "}
+                {selectedUser ? `ID: ${selectedUser["User-ID"]}` : "None"}
               </Typography>
             </Grid>
           </Grid>

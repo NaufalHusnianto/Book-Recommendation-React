@@ -1,40 +1,36 @@
 import React from "react";
 import {
   Card,
-  CardMedia,
   CardContent,
-  CardActions,
+  CardMedia,
   Typography,
-  Button,
-  Chip,
   Box,
+  Chip,
   Rating,
   Tooltip,
 } from "@mui/material";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import ShareIcon from "@mui/icons-material/Share";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 
-const BookCard = ({ book, ratings, selectedUser, index }) => {
-  const getBookRating = (isbn) => {
-    const bookRatings = ratings.filter((r) => r.ISBN === isbn);
-    if (bookRatings.length === 0) return 0;
-
-    const avgRating =
-      bookRatings.reduce((sum, r) => sum + parseInt(r["Book-Rating"]), 0) /
-      bookRatings.length;
-    return avgRating;
+const BookCard = ({
+  book,
+  isRecommendation = false,
+  predictedRating = null,
+}) => {
+  // Format rating untuk ditampilkan
+  const formatRating = (rating) => {
+    if (!rating) return "N/A";
+    return parseFloat(rating).toFixed(1);
   };
 
-  const getUserRating = (isbn) => {
-    if (!selectedUser) return null;
-    const userRating = ratings.find(
-      (r) => r["User-ID"] === selectedUser["User-ID"] && r.ISBN === isbn
-    );
-    return userRating ? parseInt(userRating["Book-Rating"]) : null;
-  };
+  // Ambil tahun publikasi
+  const year = book["Year-Of-Publication"] || "Tahun tidak diketahui";
 
-  const rating = getBookRating(book.ISBN);
-  const userRating = getUserRating(book.ISBN);
+  // Hitung rating untuk display
+  const displayRating = isRecommendation ? predictedRating : null;
+  const ratingValue = displayRating
+    ? Math.min(parseFloat(displayRating) / 2, 5)
+    : 0;
 
   return (
     <Card
@@ -49,6 +45,7 @@ const BookCard = ({ book, ratings, selectedUser, index }) => {
         },
       }}
     >
+      {/* Book Cover */}
       <CardMedia
         component="img"
         height="200"
@@ -56,56 +53,141 @@ const BookCard = ({ book, ratings, selectedUser, index }) => {
           book["Image-URL-L"] ||
           book["Image-URL-M"] ||
           book["Image-URL-S"] ||
-          "https://via.placeholder.com/150x200?text=No+Image"
+          "https://via.placeholder.com/150x200?text=No+Cover"
         }
-        alt={book["Book-Title"]}
-        sx={{ objectFit: "cover" }}
+        alt={book["Book-Title"] || "Book cover"}
+        sx={{
+          objectFit: "cover",
+          bgcolor: "grey.100",
+        }}
       />
 
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography gutterBottom variant="h6" component="div" noWrap>
-          {book["Book-Title"]}
-        </Typography>
+      <CardContent sx={{ flexGrow: 1, p: 2 }}>
+        {/* Rating Chip */}
+        {(displayRating || isRecommendation) && (
+          <Box
+            sx={{
+              mb: 1,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Chip
+              icon={<StarIcon />}
+              label={
+                <Typography variant="body2" fontWeight="bold">
+                  {formatRating(displayRating)}
+                  {isRecommendation ? " (Prediksi)" : ""}
+                </Typography>
+              }
+              color={isRecommendation ? "secondary" : "primary"}
+              variant="filled"
+              size="small"
+            />
 
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          by {book["Book-Author"]}
-        </Typography>
-
-        <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-          <Rating value={rating / 2} precision={0.5} readOnly size="small" />
-          <Typography variant="body2" sx={{ ml: 1 }}>
-            {rating.toFixed(1)}/10
-          </Typography>
-        </Box>
-
-        {userRating && (
-          <Chip
-            label={`Your rating: ${userRating}/10`}
-            color="primary"
-            size="small"
-            sx={{ mb: 1 }}
-          />
+            {isRecommendation && (
+              <Chip
+                label="Rekomendasi"
+                color="success"
+                size="small"
+                variant="outlined"
+              />
+            )}
+          </Box>
         )}
 
-        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 1 }}>
-          <Chip label={book.Publisher} size="small" variant="outlined" />
-          <Chip
-            label={book["Year-Of-Publication"]}
-            size="small"
-            variant="outlined"
-          />
-          <Chip label={book.ISBN} size="small" variant="outlined" />
-        </Box>
-      </CardContent>
+        {/* Book Title */}
+        <Typography
+          variant="h6"
+          component="h3"
+          sx={{
+            fontSize: "1rem",
+            fontWeight: "bold",
+            mb: 1,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            height: "2.8em",
+            lineHeight: "1.4em",
+          }}
+        >
+          {book["Book-Title"] || "Judul tidak tersedia"}
+        </Typography>
 
-      <CardActions>
-        <Button size="small" startIcon={<FavoriteIcon />}>
-          Wishlist
-        </Button>
-        <Button size="small" startIcon={<ShareIcon />}>
-          Share
-        </Button>
-      </CardActions>
+        {/* Author */}
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            mb: 1,
+            display: "-webkit-box",
+            WebkitLineClamp: 1,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            fontStyle: "italic",
+          }}
+        >
+          {book["Book-Author"] || "Penulis tidak diketahui"}
+        </Typography>
+
+        {/* Publisher */}
+        {book.Publisher && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            display="block"
+            sx={{
+              mb: 0.5,
+              display: "-webkit-box",
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {book.Publisher}
+          </Typography>
+        )}
+
+        {/* Year */}
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          display="block"
+          sx={{ mb: 1 }}
+        >
+          Tahun: {year}
+        </Typography>
+
+        {/* ISBN */}
+        {book.ISBN && (
+          <Typography variant="caption" color="text.disabled" display="block">
+            ISBN: {book.ISBN.substring(0, 10)}...
+          </Typography>
+        )}
+
+        {/* Rating Stars (jika ada rating) */}
+        {ratingValue > 0 && (
+          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Tooltip title={`Rating: ${formatRating(displayRating)}/10`}>
+              <Box>
+                <Rating
+                  value={ratingValue}
+                  precision={0.5}
+                  readOnly
+                  size="small"
+                  icon={<StarIcon fontSize="inherit" />}
+                  emptyIcon={<StarBorderIcon fontSize="inherit" />}
+                />
+              </Box>
+            </Tooltip>
+            <Typography variant="caption" color="text.secondary">
+              ({formatRating(displayRating)})
+            </Typography>
+          </Box>
+        )}
+      </CardContent>
     </Card>
   );
 };
